@@ -5,7 +5,7 @@ import { getDb, type Sql } from "@/lib/db/client";
 import { newId } from "@/lib/ids";
 import { HUBS, INDUSTRIES, LOCAL_SERVICES, ROUTES, STATE_NAMES } from "@/lib/seo/catalog";
 import { findPlace, industryDocument, routeDocument, serviceDocument, stateDocument, type GeoPlace } from "@/lib/seo/compose";
-import { scoreDocument, statusForScore, type SeoDocument } from "@/lib/seo/quality";
+import { scoreDocument, statusForScore, validateStructuredData, type SeoDocument } from "@/lib/seo/quality";
 
 const SOURCE = "Australia Post delivery localities with ABS LGA fields, Matthew Proctor australian_postcodes compilation";
 const VERSION = "extract-2026-10-13";
@@ -215,9 +215,21 @@ export async function summarise(query: Sql) {
   const duplicates = await query(`SELECT COUNT(*)::int AS count FROM seo_candidates WHERE duplicate_of IS NOT NULL`);
   const missingGeo = await query(`SELECT COUNT(*)::int AS count FROM seo_candidates WHERE geographic_valid = FALSE`);
   const published = byStatus.published ?? 0;
+  const bands = await query(
+    `SELECT
+       SUM(CASE WHEN quality_score >= 85 THEN 1 ELSE 0 END)::int AS high,
+       SUM(CASE WHEN quality_score >= 70 AND quality_score < 85 THEN 1 ELSE 0 END)::int AS mid,
+       SUM(CASE WHEN quality_score < 70 THEN 1 ELSE 0 END)::int AS low
+     FROM seo_candidates`,
+  );
   return {
     byStatus,
     published,
+    scoreBands: {
+      high: Number(bands[0]?.high ?? 0),
+      mid: Number(bands[0]?.mid ?? 0),
+      low: Number(bands[0]?.low ?? 0),
+    },
     awaitingReview: byStatus.awaiting_review ?? 0,
     needsImprovement: byStatus.needs_improvement ?? 0,
     candidates: Object.values(byStatus).reduce((sum, count) => sum + count, 0),
@@ -227,7 +239,7 @@ export async function summarise(query: Sql) {
   };
 }
 
-export async function listCandidates(filters: { q?: string; status?: string; state?: string; family?: string; page?: number }) {
+export async function listCandidates(filters: { q?: string; status?: string; state?: string; family?: string; service?: string; industry?: string; sort?: string; page?: number }) {
   const db = await getDb();
   const page = Math.max(1, filters.page ?? 1);
   const where: string[] = ["TRUE"];
@@ -248,12 +260,23 @@ export async function listCandidates(filters: { q?: string; status?: string; sta
     params.push(filters.family);
     where.push(`family = $${params.length}`);
   }
+  if (filters.service) {
+    params.push(filters.service);
+    where.push(`service_slug = $${params.length}`);
+  }
+  if (filters.industry) {
+    params.push(filters.industry);
+    where.push(`industry_slug = $${params.length}`);
+  }
   params.push(40);
   params.push((page - 1) * 40);
+  const order = filters.sort === "demand"
+    ? "CASE WHEN search_volume IS NULL THEN 1 ELSE 0 END, search_volume DESC, quality_score DESC, url"
+    : "quality_score DESC, url";
   const rows = await db.query(
-    `SELECT id, url, family, primary_keyword, state_code, quality_score, status, demand_label, indexable
+    `SELECT id, url, family, primary_keyword, state_code, quality_score, status, demand_label, indexable, service_slug, industry_slug
      FROM seo_candidates WHERE ${where.join(" AND ")}
-     ORDER BY quality_score DESC, url
+     ORDER BY ${order}
      LIMIT $${params.length - 1} OFFSET $${params.length}`,
     params,
   );
@@ -340,4 +363,71 @@ export async function reviewCandidates(actor: string, ids: string[], action: "ap
     changed += 1;
   }
   return changed;
+}
+
+export type CandidateEdit = {
+  title: string;
+  description: string;
+  h1: string;
+  summary: string;
+  sections: { heading: string; body: string }[];
+  faqs: { q: string; a: string }[];
+};
+
+export async function getCandidate(id: string) {
+  const db = await getDb();
+  const rows = await db.query(`SELECT * FROM seo_candidates WHERE id = $1`, [id]);
+  const row = rows[0];
+  if (!row) return null;
+  const doc = JSON.parse(String(row.content_json)) as SeoDocument;
+  const similar = await db.query(
+    `SELECT id, url, primary_keyword, quality_score, status FROM seo_candidates
+     WHERE id <> $1 AND family = $2 ORDER BY quality_score DESC LIMIT 5`,
+    [id, row.family],
+  );
+  return { row, doc, score: JSON.parse(String(row.quality_json || "{}")), schema: validateStructuredData(doc), similar };
+}
+
+export async function saveCandidate(actor: string, id: string, edit: CandidateEdit) {
+  const db = await getDb();
+  const rows = await db.query(`SELECT * FROM seo_candidates WHERE id = $1`, [id]);
+  const row = rows[0];
+  if (!row) throw new Error("Page not found.");
+  const doc = JSON.parse(String(row.content_json)) as SeoDocument;
+  doc.title = edit.title.trim().slice(0, 70);
+  doc.description = edit.description.trim().slice(0, 170);
+  doc.h1 = edit.h1.trim().slice(0, 120);
+  doc.summary = edit.summary.trim().slice(0, 800);
+  doc.sections = edit.sections.slice(0, 8).map((section) => ({ heading: section.heading.trim().slice(0, 80), body: section.body.trim().slice(0, 2000) })).filter((section) => section.heading && section.body);
+  doc.faqs = edit.faqs.slice(0, 8).map((faq) => ({ q: faq.q.trim().slice(0, 160), a: faq.a.trim().slice(0, 800) })).filter((faq) => faq.q && faq.a);
+  const score = scoreDocument(doc, Boolean(row.duplicate_of));
+  const schema = validateStructuredData(doc);
+  if (!schema.ok) {
+    score.mandatoryFailures.push(...schema.issues);
+    score.publication = "reject";
+    score.indexable = false;
+  }
+  const current = String(row.status);
+  let status = current;
+  let indexable = false;
+  if (score.mandatoryFailures.length || score.publication !== "eligible") {
+    status = score.total >= 70 ? "needs_improvement" : "candidate";
+  } else if (current === "published") {
+    status = "published";
+    indexable = true;
+  } else if (current === "noindex" || current === "archived") {
+    status = current;
+  } else {
+    status = "awaiting_review";
+  }
+  await db.query(
+    `UPDATE seo_candidates SET content_json = $2, quality_score = $3, quality_json = $4, status = $5, indexable = $6,
+      reviewed_at = NOW(), reviewed_by = $7, content_changed_at = NOW() WHERE id = $1`,
+    [id, JSON.stringify(doc), score.total, JSON.stringify(score), status, indexable, actor],
+  );
+  await db.query(
+    `INSERT INTO seo_reviews (id, candidate_id, action, actor, note) VALUES ($1,$2,'edit',$3,$4)`,
+    [newId(), id, actor, `Edited content. Score ${score.total}. Status ${status}.`],
+  );
+  return { score, status, schema };
 }

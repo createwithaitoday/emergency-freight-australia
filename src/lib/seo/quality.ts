@@ -96,6 +96,17 @@ export function scoreDocument(doc: SeoDocument, duplicate: boolean): ScoreBreakd
   };
 }
 
+export function validateStructuredData(doc: SeoDocument) {
+  const issues: string[] = [];
+  if (!doc.h1 || !doc.summary) issues.push("Service schema needs a visible heading and summary.");
+  if (doc.breadcrumbs.length < 2) issues.push("Breadcrumb schema needs at least two visible crumbs.");
+  if (!doc.canonicalPath.startsWith("/")) issues.push("Canonical path must start with /.");
+  if (doc.canonicalPath.includes("localhost")) issues.push("Canonical URL points at localhost.");
+  const broken = doc.links.filter((link) => !link.href.startsWith("/") || link.href.includes(" "));
+  if (broken.length) issues.push("An internal link is missing or not a site path.");
+  return { ok: issues.length === 0, issues };
+}
+
 export function statusForScore(score: ScoreBreakdown, autoPublish: boolean, enriched: boolean) {
   if (score.mandatoryFailures.length || score.publication === "reject") return enriched ? "needs_improvement" : "candidate";
   if (score.publication === "improve") return "needs_improvement";

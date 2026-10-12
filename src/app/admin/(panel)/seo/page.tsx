@@ -13,6 +13,9 @@ export default async function SeoPage({ searchParams }: { searchParams: Promise<
     status: params.status,
     state: params.state,
     family: params.family,
+    service: params.service,
+    industry: params.industry,
+    sort: params.sort,
     page: Number(params.page || 1),
   }).catch(() => ({ rows: [], page: 1 }));
   return (
@@ -29,7 +32,7 @@ export default async function SeoPage({ searchParams }: { searchParams: Promise<
         demand: String(row.demand_label),
       }))}
       page={list.page}
-      filters={{ q: params.q ?? "", status: params.status ?? "", state: params.state ?? "", family: params.family ?? "" }}
+      filters={{ q: params.q ?? "", status: params.status ?? "", state: params.state ?? "", family: params.family ?? "", service: params.service ?? "", industry: params.industry ?? "", sort: params.sort ?? "score" }}
     />
   );
 }

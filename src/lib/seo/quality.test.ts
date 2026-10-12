@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { LOCAL_SERVICES } from "@/lib/seo/catalog";
 import { industryDocument, serviceDocument, type GeoPlace } from "@/lib/seo/compose";
 import { plannedCandidateCount } from "@/lib/seo/inventory";
-import { scoreDocument } from "@/lib/seo/quality";
+import { scoreDocument, validateStructuredData } from "@/lib/seo/quality";
 import { INDUSTRIES } from "@/lib/seo/catalog";
 
 const sydney: GeoPlace = {
@@ -42,6 +42,12 @@ describe("seo quality gate", () => {
     const score = scoreDocument(doc, false);
     expect(score.mandatoryFailures.join(" ")).toMatch(/Unsupported/);
     expect(score.indexable).toBe(false);
+  });
+
+  it("rejects a canonical that points at localhost", () => {
+    const doc = serviceDocument(sydney, LOCAL_SERVICES[0]);
+    doc.canonicalPath = "http://localhost:3000/services/emergency-courier";
+    expect(validateStructuredData(doc).ok).toBe(false);
   });
 
   it("rejects a duplicate url", () => {

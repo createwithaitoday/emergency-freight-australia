@@ -1,5 +1,5 @@
 import { currentAdmin } from "@/lib/auth";
-import { ensureSeoInventory, importKeywords, reviewCandidates } from "@/lib/seo/inventory";
+import { ensureSeoInventory, importKeywords, reviewCandidates, saveCandidate, type CandidateEdit } from "@/lib/seo/inventory";
 import { sameOrigin } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +23,13 @@ export async function POST(request: Request) {
       const csv = typeof body?.csv === "string" ? body.csv : "";
       const imported = await importKeywords(admin.email, csv);
       return Response.json({ message: `Imported ${imported} keyword rows. Blank volumes stay labelled Demand not yet verified.` });
+    }
+    if (action === "save") {
+      const id = typeof body?.id === "string" ? body.id : "";
+      const edit = body?.edit as CandidateEdit | undefined;
+      if (!id || !edit || !Array.isArray(edit.sections) || !Array.isArray(edit.faqs)) return Response.json({ error: "Missing page content." }, { status: 400 });
+      const saved = await saveCandidate(admin.email, id, edit);
+      return Response.json({ message: `Saved. Score ${saved.score.total}. Status ${saved.status}.`, saved });
     }
     if (action === "review") {
       const ids = Array.isArray(body?.ids) ? body.ids.filter((id: unknown) => typeof id === "string") : [];

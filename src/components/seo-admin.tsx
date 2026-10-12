@@ -10,10 +10,10 @@ export function SeoAdmin({
   page,
   filters,
 }: {
-  summary: { candidates: number; published: number; awaitingReview: number; needsImprovement: number; duplicates: number; missingGeo: number; byStatus: Record<string, number> } | null;
+  summary: { candidates: number; published: number; awaitingReview: number; needsImprovement: number; duplicates: number; missingGeo: number; byStatus: Record<string, number>; scoreBands?: { high: number; mid: number; low: number } } | null;
   rows: Row[];
   page: number;
-  filters: { q: string; status: string; state: string; family: string };
+  filters: { q: string; status: string; state: string; family: string; service: string; industry: string; sort: string };
 }) {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -53,6 +53,9 @@ export function SeoAdmin({
             ["Need improvement", summary.needsImprovement],
             ["Duplicate flags", summary.duplicates],
             ["Missing geography", summary.missingGeo],
+            ["Score 85+", summary.scoreBands?.high ?? 0],
+            ["Score 70–84", summary.scoreBands?.mid ?? 0],
+            ["Score under 70", summary.scoreBands?.low ?? 0],
           ].map(([label, value]) => (
             <div key={String(label)} className="rounded-2xl border border-white/10 p-3">
               <dt className="text-xs uppercase tracking-wide text-white/50">{label}</dt>
@@ -75,6 +78,12 @@ export function SeoAdmin({
           <option value="">Any family</option>
           {["state", "local-service", "route", "industry", "industry-location"].map((family) => <option key={family}>{family}</option>)}
         </select>
+        <input className="field" name="service" placeholder="Service slug" defaultValue={filters.service} />
+        <input className="field" name="industry" placeholder="Industry slug" defaultValue={filters.industry} />
+        <select className="field" name="sort" defaultValue={filters.sort}>
+          <option value="score">Quality score</option>
+          <option value="demand">Verified search demand</option>
+        </select>
         <button className="rounded-xl border border-white/20 px-3 py-2 text-sm" type="submit">Filter</button>
       </form>
       <div className="flex flex-wrap gap-2 text-sm">
@@ -93,14 +102,18 @@ export function SeoAdmin({
                 <td>{row.score}</td>
                 <td>{row.status}</td>
                 <td>{row.keyword}</td>
-                <td>{row.status === "published" ? <a className="underline" href={row.url}>{row.url}</a> : row.url}</td>
+                <td><a className="underline" href={`/admin/seo/${row.id}`}>Edit</a> · {row.status === "published" ? <a className="underline" href={row.url}>{row.url}</a> : row.url}</td>
                 <td>{row.demand}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <p className="text-sm text-white/60">Page {page}. Forty rows at a time.</p>
+      <p className="flex gap-4 text-sm text-white/60">
+        <span>Page {page}. Forty rows at a time.</span>
+        {page > 1 ? <a className="underline" href={`/admin/seo?${new URLSearchParams({ ...filters, page: String(page - 1) })}`}>Previous</a> : null}
+        <a className="underline" href={`/admin/seo?${new URLSearchParams({ ...filters, page: String(page + 1) })}`}>Next</a>
+      </p>
       <label className="grid gap-2 text-sm">
         Keyword CSV: keyword,volume,competition,source
         <textarea className="field min-h-24" value={csv} onChange={(event) => setCsv(event.target.value)} />
