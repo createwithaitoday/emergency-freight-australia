@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SeoArticle } from "@/components/seo-article";
 import { locations } from "@/lib/content";
+import { stateImages } from "@/lib/page-images";
 import { getPublished } from "@/lib/seo/inventory";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +27,7 @@ export default async function LocationPage({ params }: { params: Promise<{ slug:
   if (!location) {
     const page = await getPublished(`/locations/${slug}`);
     if (!page) notFound();
-    return <SeoArticle doc={page.doc} updated={page.updated} />;
+    return <SeoArticle doc={page.doc} updated={page.updated} image={stateImages[slug] ?? null} />;
   }
   return (
     <article className="mx-auto max-w-3xl px-4 py-12">

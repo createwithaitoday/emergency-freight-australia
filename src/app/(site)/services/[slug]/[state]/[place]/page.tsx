@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { SeoArticle } from "@/components/seo-article";
+import { imageForPlace } from "@/lib/page-images";
 import { getPublished } from "@/lib/seo/inventory";
 
 export const dynamic = "force-dynamic";
@@ -16,5 +17,5 @@ export default async function LocalServicePage({ params }: { params: Promise<{ s
   const { slug, state, place } = await params;
   const page = await getPublished(`/services/${slug}/${state}/${place}`);
   if (!page) notFound();
-  return <SeoArticle doc={page.doc} updated={page.updated} />;
+  return <SeoArticle doc={page.doc} updated={page.updated} image={imageForPlace(place)} />;
 }

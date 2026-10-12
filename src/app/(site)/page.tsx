@@ -153,9 +153,12 @@ export default async function HomePage() {
         <h2 className="font-display text-4xl">Coverage we will actually talk about</h2>
         <div className="mt-8 grid gap-4 md:grid-cols-3">
           {locations.map((location) => (
-            <Link key={location.slug} href={`/locations/${location.slug}`} className="rounded-2xl border border-line bg-white p-5">
-              <span className="font-display text-2xl">{location.h1}</span>
-              <span className="mt-2 block text-sm leading-6 text-muted">{location.description}</span>
+            <Link key={location.slug} href={`/locations/${location.slug}`} className="overflow-hidden rounded-2xl border border-line bg-white">
+              <img src={location.image} alt={location.imageAlt} className="h-40 w-full object-cover" />
+              <span className="block p-5">
+                <span className="font-display text-2xl">{location.h1}</span>
+                <span className="mt-2 block text-sm leading-6 text-muted">{location.description}</span>
+              </span>
             </Link>
           ))}
         </div>

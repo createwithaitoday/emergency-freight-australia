@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { brand } from "@/lib/brand";
+import type { PageImage } from "@/lib/page-images";
 import type { SeoDocument } from "@/lib/seo/quality";
 
-export function SeoArticle({ doc, updated }: { doc: SeoDocument; updated?: string | null }) {
+export function SeoArticle({ doc, updated, image }: { doc: SeoDocument; updated?: string | null; image?: PageImage | null }) {
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "Service",
@@ -35,6 +36,7 @@ export function SeoArticle({ doc, updated }: { doc: SeoDocument; updated?: strin
           ))}
         </ol>
       </nav>
+      {image ? <img src={image.src} alt={image.alt} className="mt-6 h-72 w-full rounded-3xl object-cover" /> : null}
       <h1 className="mt-4 font-display text-5xl">{doc.h1}</h1>
       <p className="mt-4 text-lg leading-8">{doc.summary}</p>
       {doc.sections.map((section) => (

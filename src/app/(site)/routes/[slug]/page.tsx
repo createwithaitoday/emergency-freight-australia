@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { SeoArticle } from "@/components/seo-article";
+import { imageForHub } from "@/lib/page-images";
+import { ROUTES } from "@/lib/seo/catalog";
 import { getPublished } from "@/lib/seo/inventory";
 
 export const dynamic = "force-dynamic";
@@ -16,5 +18,7 @@ export default async function RoutePage({ params }: { params: Promise<{ slug: st
   const { slug } = await params;
   const page = await getPublished(`/routes/${slug}`);
   if (!page) notFound();
-  return <SeoArticle doc={page.doc} updated={page.updated} />;
+  const route = ROUTES.find((item) => item.slug === slug);
+  const image = route ? imageForHub(route.origin.name, route.origin.postcode) : null;
+  return <SeoArticle doc={page.doc} updated={page.updated} image={image} />;
 }
