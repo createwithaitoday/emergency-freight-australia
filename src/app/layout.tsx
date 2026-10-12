@@ -21,7 +21,6 @@ export const metadata: Metadata = {
     locale: "en_AU",
     type: "website",
   },
-  icons: { icon: "/images/logo-mark.jpg" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
