@@ -1,26 +1,112 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  --font-sans: var(--font-source), "Source Sans 3", sans-serif;
+  --font-display: var(--font-outfit), Outfit, sans-serif;
+  --color-navy-950: #07111d;
+  --color-navy-900: #0c1a2e;
+  --color-navy-800: #14304f;
+  --color-navy-700: #1d4268;
+  --color-ink: #122033;
+  --color-muted: #5c6c80;
+  --color-line: #e2e7ee;
+  --color-paper: #f4f6f8;
+  --color-orange: #e85d04;
+  --color-orange-ink: #1c0d04;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+h1, h2, h3, .font-display {
+  font-family: var(--font-display);
+}
+
+:focus-visible {
+  outline: 2px solid #e85d04;
+  outline-offset: 3px;
+}
+
+.field {
+  width: 100%;
+  border-radius: 0.7rem;
+  border: 1px solid #d5dde6;
+  background: white;
+  padding: 0.8rem 0.85rem;
+  font-size: 1rem;
+  line-height: 1.3;
+}
+
+.field:focus {
+  border-color: #e85d04;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(232, 93, 4, 0.16);
+}
+
+.btn-orange {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border-radius: 0.75rem;
+  background: #e85d04;
+  color: #1c0d04;
+  font-weight: 700;
+  padding: 0.85rem 1.1rem;
+}
+
+.btn-orange:hover {
+  background: #f36d14;
+}
+
+@media (max-width: 767px) {
+  header a.btn-orange {
+    display: none;
+  }
+}
+
+.btn-navy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  background: #0c1a2e;
+  color: white;
+  font-weight: 700;
+  padding: 0.85rem 1.1rem;
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: white;
+  font-weight: 700;
+  padding: 0.85rem 1.1rem;
+}
+
+.prose-legal h2 {
+  margin-top: 1.6rem;
+  font-size: 1.35rem;
+}
+
+.prose-legal p,
+.prose-legal li {
+  margin-top: 0.7rem;
+  color: #243246;
+  line-height: 1.65;
+}
+
+.prose-legal ul {
+  padding-left: 1.2rem;
+  list-style: disc;
 }

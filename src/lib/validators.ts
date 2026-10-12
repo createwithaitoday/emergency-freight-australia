@@ -1,0 +1,86 @@
+import { z } from "zod";
+import { URGENCIES } from "@/lib/pricing/types";
+import type { QuoteInput } from "@/lib/pricing/types";
+
+const text = (max: number) => z.string().trim().max(max);
+
+export const quoteSchema = z.object({
+  pickupAddress: text(200).optional().default(""),
+  deliveryAddress: text(200).optional().default(""),
+  pickupSuburb: text(80).optional().default(""),
+  deliverySuburb: text(80).optional().default(""),
+  pickupPostcode: z.string().trim().regex(/^\d{4}$/, "Enter a four-digit pickup postcode"),
+  deliveryPostcode: z.string().trim().regex(/^\d{4}$/, "Enter a four-digit delivery postcode"),
+  extraStops: z.number().int().min(0).max(8).optional().default(0),
+  urgency: z.enum(URGENCIES),
+  deadline: text(40).optional().default(""),
+  category: text(40).optional().default("general"),
+  description: text(500).optional().default(""),
+  packages: z.number().int().min(1).max(100).optional().default(1),
+  weightPerPackageKg: z.number().min(0.1).max(20000),
+  lengthCm: z.number().min(1).max(2000),
+  widthCm: z.number().min(1).max(2000),
+  heightCm: z.number().min(1).max(2000),
+  fragile: z.boolean().optional().default(false),
+  palletised: z.boolean().optional().default(false),
+  forkliftRequired: z.boolean().optional().default(false),
+  tailLiftRequired: z.boolean().optional().default(false),
+  loadingAssistance: z.boolean().optional().default(false),
+  dangerousGoods: z.boolean().optional().default(false),
+  dgDeclaration: text(1000).optional().default(""),
+  goodsValueCents: z.number().int().min(0).max(100_000_000).optional().default(0),
+  vehicleCode: text(40).optional().default(""),
+  waitingMinutes: z.number().int().min(0).max(1440).optional().default(0),
+  tollsCents: z.number().int().min(0).max(1_000_000).optional().default(0),
+  airCoordination: z.boolean().optional().default(false),
+  publicHoliday: z.boolean().optional().default(false),
+});
+
+export const bookingSchema = quoteSchema.extend({
+  serviceCode: text(40),
+  idempotencyKey: z.string().trim().min(8).max(80),
+  contactName: text(120).min(2),
+  businessName: text(160).optional().default(""),
+  email: z.string().trim().regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, "Enter a valid email"),
+  phone: z.string().trim().min(8).max(20),
+  pickupContact: text(160).optional().default(""),
+  deliveryContact: text(160).optional().default(""),
+  accessInstructions: text(500).optional().default(""),
+  purchaseOrder: text(80).optional().default(""),
+  specialRequirements: text(500).optional().default(""),
+  termsAccepted: z.literal(true),
+  website: z.string().optional().default(""),
+  utm: z.record(z.string(), z.string()).optional().default({}),
+});
+
+export function toQuoteInput(data: z.infer<typeof quoteSchema>): QuoteInput {
+  return {
+    pickupAddress: data.pickupAddress,
+    deliveryAddress: data.deliveryAddress,
+    pickupSuburb: data.pickupSuburb,
+    deliverySuburb: data.deliverySuburb,
+    pickupPostcode: data.pickupPostcode,
+    deliveryPostcode: data.deliveryPostcode,
+    extraStops: data.extraStops,
+    urgency: data.urgency,
+    deadline: data.deadline,
+    category: data.category,
+    packages: data.packages,
+    weightPerPackageKg: data.weightPerPackageKg,
+    lengthCm: data.lengthCm,
+    widthCm: data.widthCm,
+    heightCm: data.heightCm,
+    fragile: data.fragile,
+    palletised: data.palletised,
+    forkliftRequired: data.forkliftRequired,
+    tailLiftRequired: data.tailLiftRequired,
+    loadingAssistance: data.loadingAssistance,
+    dangerousGoods: data.dangerousGoods,
+    goodsValueCents: data.goodsValueCents,
+    vehicleCode: data.vehicleCode,
+    waitingMinutes: data.waitingMinutes,
+    tollsCents: data.tollsCents,
+    airCoordination: data.airCoordination,
+    publicHoliday: data.publicHoliday,
+  };
+}
