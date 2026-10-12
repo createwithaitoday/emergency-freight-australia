@@ -50,6 +50,7 @@ export const bookingSchema = quoteSchema.extend({
   specialRequirements: text(500).optional().default(""),
   termsAccepted: z.literal(true),
   website: z.string().optional().default(""),
+  intent: z.enum(["email", "pay_estimate"]).optional().default("email"),
   utm: z.record(z.string(), z.string()).optional().default({}),
 });
 

@@ -17,6 +17,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <Link href="/admin/finance">Finance</Link>
           <Link href="/admin/templates">Templates</Link>
           <Link href="/admin/audit">Audit</Link>
+          <Link href="/admin/seo">SEO</Link>
           <Link href="/">Website</Link>
         </nav>
         <form action="/api/admin/logout" method="post" className="ml-auto">

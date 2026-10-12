@@ -29,6 +29,11 @@ export type DistanceSource =
 
 export interface DistanceResult {
   kilometres: number | null;
+  /** Original provider distance before rounding. Metres when the provider returns metres. */
+  metres?: number | null;
+  unit?: "m" | "km";
+  provider?: string | null;
+  calculatedAt?: string | null;
   source: DistanceSource;
   label: string;
 }
@@ -96,6 +101,25 @@ export interface PricingConfig {
   monthlyOverheadCents: number;
   /** Staff warning if an approved ex-GST price is below this. */
   minimumViableSellingCents: number;
+  /** Round road distance up to the next whole kilometre, then apply this floor. */
+  distanceRounding: "ceil_km";
+  minChargeableKm: number;
+  /** Dollar floor on estimated gross profit. Zero disables the dollar test. */
+  minGrossProfitCents: number;
+  /** Fraction, so 0.25 means 25 percent of ex-GST revenue. */
+  minGrossMargin: number;
+  maxDiscountPercent: number;
+  /** Applied to the amount the customer pays, then deducted in the profit calculation. */
+  paymentFeePercent: number;
+  paymentFeeFixedCents: number;
+  internalLabourCents: number;
+  emergencySurchargeCents: number;
+  /** Flat carrier allowance. Null means the carrier cost is unknown. */
+  carrierAllowanceCents: number | null;
+  /** Extra carrier cost per chargeable kilometre. Null means it is not approved. */
+  carrierPerKmCents: number | null;
+  /** Applied only to the per-kilometre carrier allowance on interstate jobs. */
+  returnTripMultiplier: number;
   publicHolidays: string[];
   remotePostcodes: string[];
   services: ServiceRate[];
@@ -157,7 +181,16 @@ export interface ServiceQuote {
   /** True when the figure is a calculated total. False for an unpriced custom quote. */
   calculated: boolean;
   status: "indicative" | "confirmed";
+  quoteState:
+    | "indicative"
+    | "awaiting_dispatch_review"
+    | "awaiting_carrier_confirmation"
+    | "confirmed";
   payable: boolean;
+  estimatedDirectCostCents: number | null;
+  estimatedProfitCents: number | null;
+  estimatedMarginPercent: number | null;
+  customerNotice: string;
   reasons: string[];
   limitations: string;
   distanceKm: number | null;

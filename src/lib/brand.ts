@@ -17,7 +17,7 @@ export const brand = {
   phoneDisplay: process.env.NEXT_PUBLIC_PHONE_DISPLAY || "1300 000 000",
   phoneTel: process.env.NEXT_PUBLIC_PHONE_TEL || "+611300000000",
   email: process.env.NEXT_PUBLIC_DISPATCH_EMAIL || "dispatch@example.com",
-  domain: process.env.NEXT_PUBLIC_DOMAIN || "emergencyfreight.com.au",
+  domain: process.env.NEXT_PUBLIC_DOMAIN || "emergencyfreightaustralia.com.au",
   url: process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000",
   abn: process.env.NEXT_PUBLIC_ABN || "",
   legalName: process.env.NEXT_PUBLIC_LEGAL_NAME || "Emergency Freight Australia",

@@ -99,9 +99,59 @@ export function applyGst(taxableCents: number, config: PricingConfig) {
   };
 }
 
-export function chargeableKilometres(kilometres: number | null) {
-  if (kilometres == null || Number.isNaN(kilometres) || kilometres < 0) return null;
-  return Math.max(1, Math.ceil(kilometres));
+export const INDICATIVE_NOTICE =
+  "Your estimate is based on the information supplied and our current pricing rules. Final pricing and availability may depend on vehicle requirements, carrier costs, access conditions, tolls and your delivery deadline. We will confirm any additional charges before accepting the booking.";
+
+export const CONFIRMED_NOTICE =
+  "This price is confirmed for the stated route, freight and deadline. It expires at the time shown. Tolls, waiting time and extra stops are included only when they appear in the price lines.";
+
+export function chargeableKilometres(kilometres: number | null, minimum = 1) {
+  if (kilometres == null || !Number.isFinite(kilometres) || kilometres < 0) return null;
+  const rounded = Math.ceil(kilometres - 1e-9);
+  return Math.max(minimum, rounded);
+}
+
+/** Ex-GST selling price that still clears the configured profit and margin after percentage payment fees. */
+export function minimumSellingNetCents(directCostExGstCents: number, config: PricingConfig) {
+  const gstFactor = config.gstRegistered && !config.pricesIncludeGst ? 1 + config.gstRate : 1;
+  const feeRate = config.paymentFeePercent * gstFactor;
+  const fixed = Math.max(0, directCostExGstCents) + config.paymentFeeFixedCents;
+  const profitFloor = config.minGrossProfitCents;
+  const byProfit = denominatorPrice(fixed + Math.max(0, profitFloor), 1 - feeRate);
+  const byMargin = denominatorPrice(fixed, 1 - feeRate - Math.max(0, config.minGrossMargin));
+  const raw = Math.max(byProfit, byMargin, config.minimumViableSellingCents);
+  return Number.isFinite(raw) ? raw + 1 : raw;
+}
+
+function denominatorPrice(numerator: number, denominator: number) {
+  if (denominator <= 0) return Number.POSITIVE_INFINITY;
+  return Math.ceil(numerator / denominator);
+}
+
+export function paymentFeeCents(customerTotalCents: number, config: PricingConfig) {
+  return Math.round(config.paymentFeeFixedCents + config.paymentFeePercent * Math.max(0, customerTotalCents));
+}
+
+export function requiresMarginOverride(input: {
+  netCents: number;
+  directCostExGstCents: number | null;
+  config: PricingConfig;
+}) {
+  if (input.directCostExGstCents == null) return null;
+  const tax = applyGst(input.netCents, input.config);
+  const fee = paymentFeeCents(tax.totalCents, input.config);
+  const profit = grossProfitCents(tax.netCents, input.directCostExGstCents, fee);
+  const margin = marginPercent(tax.netCents, profit);
+  if (input.netCents < input.config.minimumViableSellingCents) {
+    return "The price is below the minimum viable selling price.";
+  }
+  if (profit < input.config.minGrossProfitCents) {
+    return "The price is below the minimum gross profit.";
+  }
+  if (margin != null && margin + 1e-6 < input.config.minGrossMargin * 100) {
+    return "The price is below the minimum gross margin.";
+  }
+  return null;
 }
 
 function vehicleFits(vehicle: VehicleSpec, input: QuoteInput) {
@@ -191,7 +241,12 @@ function priceService(
       minimumApplied: false,
       calculated: false,
       status: "indicative",
+      quoteState: "awaiting_carrier_confirmation",
       payable: false,
+      estimatedDirectCostCents: null,
+      estimatedProfitCents: null,
+      estimatedMarginPercent: null,
+      customerNotice: INDICATIVE_NOTICE,
       reasons: unique(reasons),
       limitations: service.limitations,
       distanceKm: distance.kilometres,
@@ -333,15 +388,36 @@ function priceService(
   ) {
     reasons.push("Greater Sydney jobs are confirmed before acceptance. Core metro rates are only an indication here.");
   }
+  if (config.emergencySurchargeCents > 0 && input.urgency === "asap") {
+    extras.push({ code: "emergency", description: "Emergency surcharge", amountCents: config.emergencySurchargeCents });
+  }
   if (!config.autoAcceptEnabled || !service.autoAccept) {
     reasons.push("Dispatch confirms availability and the final price before you pay.");
+  }
+  if (kilometresInvalid(distance.kilometres)) {
+    reasons.push("The route distance was invalid, so no chargeable kilometres were used.");
+  }
+  const carrier = carrierCostCents(config, service.code, km);
+  if (carrier.cents == null) {
+    reasons.push("No verified carrier cost is recorded, so this price is indicative only.");
+  }
+  if (service.code === "interstate_hotshot") {
+    reasons.push("Indicative only — confirmation required");
   }
 
   const extraTotal = extras.reduce((sum, line) => sum + line.amountCents, 0);
   const subtotalBeforeGst = core + extraTotal;
   lines.push(...extras);
   const tax = applyGst(subtotalBeforeGst, config);
-  const payable = reasons.length === 0 && km != null;
+  const fee = carrier.cents == null ? null : paymentFeeCents(tax.totalCents, config);
+  const direct = carrier.cents == null ? null : carrier.cents + config.internalLabourCents + input.tollsCents;
+  const profit = direct == null || fee == null ? null : grossProfitCents(tax.netCents, direct, fee);
+  const margin = profit == null ? null : marginPercent(tax.netCents, profit);
+  if (profit != null && margin != null) {
+    const breach = requiresMarginOverride({ netCents: tax.netCents, directCostExGstCents: direct, config });
+    if (breach) reasons.push(breach);
+  }
+  const payable = reasons.length === 0 && km != null && profit != null;
   const customerReasons = payable
     ? []
     : unique(reasons).filter((reason) => !reason.startsWith("Dispatch confirms availability"));
@@ -362,7 +438,16 @@ function priceService(
     minimumApplied,
     calculated: km != null,
     status: payable ? "confirmed" : "indicative",
+    quoteState: payable
+      ? "confirmed"
+      : service.code === "interstate_hotshot"
+        ? "awaiting_carrier_confirmation"
+        : "awaiting_dispatch_review",
     payable,
+    estimatedDirectCostCents: direct,
+    estimatedProfitCents: profit,
+    estimatedMarginPercent: margin,
+    customerNotice: payable ? CONFIRMED_NOTICE : INDICATIVE_NOTICE,
     reasons: payable ? [] : customerReasons.length ? customerReasons : ["Dispatch confirms availability and the final price before you pay."],
     limitations: service.limitations,
     distanceKm: distance.kilometres,
@@ -374,6 +459,21 @@ function priceService(
     expiresAt: new Date(now.getTime() + config.quoteExpiryHours * 3600_000).toISOString(),
     fromCents: null,
   };
+}
+
+function kilometresInvalid(kilometres: number | null) {
+  return kilometres != null && (!Number.isFinite(kilometres) || kilometres < 0);
+}
+
+function carrierCostCents(config: PricingConfig, serviceCode: ServiceRate["code"], km: number | null) {
+  const known = config.carrierAllowanceCents != null || config.carrierPerKmCents != null;
+  if (!known) return { known: false, cents: null as number | null };
+  let cents = config.carrierAllowanceCents ?? 0;
+  if (config.carrierPerKmCents != null && km != null) {
+    const multiplier = serviceCode === "interstate_hotshot" ? Math.max(1, config.returnTripMultiplier) : 1;
+    cents += Math.round(config.carrierPerKmCents * km * multiplier);
+  }
+  return { known: true, cents };
 }
 
 function unique(values: string[]) {
@@ -477,6 +577,65 @@ function hotshotCorridor(a: string | null, b: string | null) {
   const allowed = new Set(["NSW", "VIC", "QLD", "SA", "ACT"]);
   if (![...states].every((state) => allowed.has(state))) return false;
   return states.has("NSW") || states.has("ACT");
+}
+
+const PREVIEW_KILOMETRES = [10, 30, 50, 100, 200, 500, 1000] as const;
+
+export function previewRateCard(config: PricingConfig) {
+  const morning = new Date("2026-06-15T00:30:00.000Z");
+  const blank: QuoteInput = {
+    pickupPostcode: "2000",
+    deliveryPostcode: "2020",
+    extraStops: 0,
+    urgency: "today",
+    category: "general",
+    packages: 1,
+    weightPerPackageKg: 8,
+    lengthCm: 40,
+    widthCm: 30,
+    heightCm: 20,
+    fragile: false,
+    palletised: false,
+    forkliftRequired: false,
+    tailLiftRequired: false,
+    loadingAssistance: false,
+    dangerousGoods: false,
+    goodsValueCents: 10000,
+    waitingMinutes: 0,
+    tollsCents: 0,
+    airCoordination: false,
+    publicHoliday: false,
+    now: morning,
+  };
+  return config.services
+    .filter((service) => service.code !== "complex")
+    .flatMap((service) =>
+      PREVIEW_KILOMETRES.map((kilometres) => {
+        const interstate = service.code === "interstate_hotshot";
+        const option = priceService(
+          service,
+          { ...blank, urgency: service.code === "overnight" ? "overnight" : "today", deliveryPostcode: interstate ? "3000" : "2020" },
+          {
+            kilometres,
+            source: "routing_api",
+            label: "administrator test distance, not a verified transport quote",
+          },
+          config,
+          service.name,
+          ["Test estimate. Not a verified transport quote."],
+        );
+        return {
+          serviceCode: service.code,
+          serviceName: service.name,
+          kilometres,
+          exGstCents: option.subtotalCents,
+          gstCents: option.gstCents,
+          totalCents: option.totalCents,
+          minimumApplied: option.minimumApplied,
+          calculated: option.calculated,
+        };
+      }),
+    );
 }
 
 export function grossProfitCents(netRevenueCents: number, directCostExGstCents: number, paymentFeeCents = 0) {

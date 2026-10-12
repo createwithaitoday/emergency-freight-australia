@@ -20,6 +20,10 @@ export async function resolveDistance(query: DistanceQuery): Promise<DistanceRes
   if (known) {
     return {
       kilometres: known,
+      metres: Math.round(known * 1000),
+      unit: "km",
+      provider: "published_corridor",
+      calculatedAt: new Date().toISOString(),
       source: "known_route",
       label: "published capital or regional road distance, not door to door",
     };
@@ -31,8 +35,12 @@ export async function resolveDistance(query: DistanceQuery): Promise<DistanceRes
     const straight = haversineKm(from, to);
     return {
       kilometres: Math.round(straight * 1.35 * 10) / 10,
+      metres: Math.round(straight * 1000),
+      unit: "m",
+      provider: "straight_line_not_road",
+      calculatedAt: new Date().toISOString(),
       source: "unverified",
-      label: "straight-line estimate with a road factor, not a verified route",
+      label: "Indicative only — confirmation required. This is not a verified road distance.",
     };
   }
 
@@ -65,6 +73,10 @@ async function googleDistance(query: DistanceQuery): Promise<DistanceResult | nu
     if (element?.status !== "OK" || !element.distance?.value) return null;
     return {
       kilometres: element.distance.value / 1000,
+      metres: element.distance.value,
+      unit: "m",
+      provider: "google_distance_matrix",
+      calculatedAt: new Date().toISOString(),
       source: "routing_api",
       label: "driving distance from the routing provider",
     };
@@ -92,6 +104,10 @@ async function openRouteDistance(query: DistanceQuery): Promise<DistanceResult |
     if (!metres) return null;
     return {
       kilometres: metres / 1000,
+      metres,
+      unit: "m",
+      provider: "openrouteservice",
+      calculatedAt: new Date().toISOString(),
       source: "postcode_route",
       label: "road distance between locality centres, not door to door",
     };

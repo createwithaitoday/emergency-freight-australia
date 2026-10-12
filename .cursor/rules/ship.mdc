@@ -1,0 +1,33 @@
+---
+description: Commit, push, and deploy Emergency Freight Australia whenever a change must go live
+alwaysApply: true
+---
+
+# Ship completed work
+
+After a completed change that must go live on emergencyfreightaustralia.com.au, always:
+
+1. Commit the relevant files on this repo. Never commit `.env`, `data/`, passwords, payment keys, or database URLs.
+2. Push to GitHub `origin` on the current branch.
+3. Deploy only the Emergency Freight app on the hosting.com account `fencenet`.
+
+Do not restart or edit other apps, domains, databases, or `public_html`.
+
+Production public URL: `https://emergencyfreightaustralia.com.au`. Build with `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_DOMAIN`, and `NEXT_PUBLIC_DISPATCH_EMAIL` set to that host and `dispatch@emergencyfreightaustralia.com.au`. Leave local `.env` on localhost.
+
+App root: `/home/fencenet/apps/emergencyfreight`. Preserve `passenger.js` and `/home/fencenet/efa-private/`. Upload `src/lib/db/schema.sql` and `data/geo/locations.json`. Restart only `apps/emergencyfreight` with `cloudlinux-selector`. Do not print secrets.
+
+Windows build:
+
+```powershell
+$env:NEXT_PUBLIC_SITE_URL = "https://emergencyfreightaustralia.com.au"
+$env:NEXT_PUBLIC_DOMAIN = "emergencyfreightaustralia.com.au"
+$env:NEXT_PUBLIC_DISPATCH_EMAIL = "dispatch@emergencyfreightaustralia.com.au"
+npm run build
+```
+
+Upload from WSL with `/home/owner/.ssh/fencenet_deploy`, then on the server install the standalone build and run:
+
+```bash
+cloudlinux-selector restart --json --interpreter nodejs --app-root apps/emergencyfreight
+```

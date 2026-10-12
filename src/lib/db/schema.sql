@@ -301,3 +301,97 @@ CREATE INDEX IF NOT EXISTS bookings_status_idx ON bookings(status);
 CREATE INDEX IF NOT EXISTS bookings_customer_idx ON bookings(customer_id);
 CREATE INDEX IF NOT EXISTS status_events_booking_idx ON status_events(booking_id);
 CREATE INDEX IF NOT EXISTS tracking_booking_idx ON tracking_records(booking_id);
+
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS estimate_prepay BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE TABLE IF NOT EXISTS geo_locations (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  state_code TEXT NOT NULL,
+  postcode TEXT,
+  lga_name TEXT,
+  lga_code TEXT,
+  lat DOUBLE PRECISION,
+  lng DOUBLE PRECISION,
+  sa2_name TEXT,
+  origin_supported BOOLEAN NOT NULL DEFAULT FALSE,
+  source TEXT NOT NULL,
+  source_id TEXT,
+  data_version TEXT,
+  updated_on TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS geo_locations_identity_idx ON geo_locations(state_code, slug, postcode, kind);
+CREATE INDEX IF NOT EXISTS geo_locations_state_idx ON geo_locations(state_code);
+
+CREATE TABLE IF NOT EXISTS seo_candidates (
+  id TEXT PRIMARY KEY,
+  url TEXT NOT NULL UNIQUE,
+  family TEXT NOT NULL,
+  primary_keyword TEXT NOT NULL,
+  secondary_keywords TEXT NOT NULL DEFAULT '[]',
+  search_intent TEXT,
+  origin_key TEXT,
+  destination_key TEXT,
+  service_slug TEXT,
+  industry_slug TEXT,
+  state_code TEXT,
+  demand_label TEXT NOT NULL DEFAULT 'Demand not yet verified',
+  search_volume INTEGER,
+  volume_source TEXT,
+  competition_label TEXT,
+  geographic_valid BOOLEAN NOT NULL DEFAULT FALSE,
+  service_feasible BOOLEAN NOT NULL DEFAULT FALSE,
+  content_json TEXT NOT NULL,
+  uniqueness_score INTEGER NOT NULL DEFAULT 0,
+  duplicate_of TEXT,
+  quality_score INTEGER NOT NULL DEFAULT 0,
+  quality_json TEXT NOT NULL DEFAULT '{}',
+  indexable BOOLEAN NOT NULL DEFAULT FALSE,
+  status TEXT NOT NULL DEFAULT 'candidate',
+  published_at TIMESTAMPTZ,
+  reviewed_at TIMESTAMPTZ,
+  reviewed_by TEXT,
+  content_changed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS seo_candidates_status_idx ON seo_candidates(status);
+CREATE INDEX IF NOT EXISTS seo_candidates_family_idx ON seo_candidates(family);
+CREATE INDEX IF NOT EXISTS seo_candidates_score_idx ON seo_candidates(quality_score DESC);
+CREATE INDEX IF NOT EXISTS seo_candidates_state_idx ON seo_candidates(state_code);
+
+CREATE TABLE IF NOT EXISTS seo_keywords (
+  id TEXT PRIMARY KEY,
+  phrase TEXT NOT NULL,
+  country TEXT NOT NULL DEFAULT 'AU',
+  language TEXT NOT NULL DEFAULT 'en',
+  search_intent TEXT,
+  monthly_volume INTEGER,
+  competition_metric TEXT,
+  competition_type TEXT,
+  source TEXT NOT NULL,
+  commercial_relevance INTEGER,
+  last_checked TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS seo_keywords_phrase_idx ON seo_keywords(phrase, country, source);
+
+CREATE TABLE IF NOT EXISTS seo_reviews (
+  id TEXT PRIMARY KEY,
+  candidate_id TEXT NOT NULL,
+  action TEXT NOT NULL,
+  actor TEXT NOT NULL,
+  note TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS seo_settings (
+  id TEXT PRIMARY KEY,
+  auto_publish BOOLEAN NOT NULL DEFAULT FALSE,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

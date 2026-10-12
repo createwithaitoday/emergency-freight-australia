@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { industries } from "@/lib/content";
+import { INDUSTRIES } from "@/lib/seo/catalog";
 
 export const metadata: Metadata = {
   title: "Industries",
@@ -20,6 +21,12 @@ export default function IndustriesPage() {
             <h2 className="font-display text-2xl">{name}</h2>
             <p className="text-sm text-muted">{copy}</p>
           </li>
+        ))}
+      </ul>
+      <h2 className="mt-10 font-display text-3xl">Industry guides</h2>
+      <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+        {INDUSTRIES.map((industry) => (
+          <li key={industry.slug}><Link className="underline" href={`/industries/${industry.slug}`}>{industry.name}</Link></li>
         ))}
       </ul>
       <Link href="/services/industrial-parts-delivery" className="mt-6 inline-block font-semibold underline">Industrial parts delivery</Link>

@@ -5,7 +5,10 @@ import {
   chargeableKilometres,
   grossProfitCents,
   marginPercent,
+  minimumSellingNetCents,
+  paymentFeeCents,
   priceQuote,
+  requiresMarginOverride,
   zoneForPostcode,
 } from "@/lib/pricing/engine";
 import type { DistanceResult, PricingConfig, QuoteInput } from "@/lib/pricing/types";
@@ -58,6 +61,7 @@ function openConfig(overrides: Partial<PricingConfig> = {}): PricingConfig {
     ...defaultPricing,
     autoAcceptEnabled: true,
     allowAutoAcceptWithoutTolls: true,
+    carrierAllowanceCents: 5000,
     services: defaultPricing.services.map((service) => ({ ...service })),
     vehicles: defaultPricing.vehicles.map((vehicle) => ({ ...vehicle })),
     surcharges: { ...defaultPricing.surcharges, heavyTiers: defaultPricing.surcharges.heavyTiers.map((tier) => ({ ...tier })) },
@@ -215,7 +219,95 @@ describe("pricing engine", () => {
   });
 });
 
+describe("rate card formula", () => {
+  const card = openConfig({ carrierAllowanceCents: null, autoAcceptEnabled: false });
+
+  function exGst(code: "metro_express" | "after_hours" | "overnight" | "interstate_hotshot", kilometres: number) {
+    const morning = new Date("2026-06-15T00:30:00.000Z");
+    const evening = new Date("2026-06-15T09:30:00.000Z");
+    const interstate = code === "interstate_hotshot";
+    const quote = priceQuote(
+      input({
+        now: code === "after_hours" ? evening : morning,
+        urgency: code === "overnight" ? "overnight" : "today",
+        pickupPostcode: "2000",
+        deliveryPostcode: interstate ? "3000" : "2020",
+        pickupSuburb: "Sydney",
+        deliverySuburb: interstate ? "Melbourne" : "Mascot",
+      }),
+      distance({ kilometres, source: "routing_api" }),
+      card,
+    );
+    return quote.options[0];
+  }
+
+  it("prices Sydney Metro Express at 10, 30 and 50 km", () => {
+    expect(exGst("metro_express", 10).subtotalCents).toBe(14900);
+    expect(exGst("metro_express", 10).minimumApplied).toBe(true);
+    expect(exGst("metro_express", 30).subtotalCents).toBe(17400);
+    expect(exGst("metro_express", 50).subtotalCents).toBe(22400);
+  });
+
+  it("prices After-Hours Express at 10, 30 and 50 km", () => {
+    expect(exGst("after_hours", 10).subtotalCents).toBe(24900);
+    expect(exGst("after_hours", 30).subtotalCents).toBe(26900);
+    expect(exGst("after_hours", 50).subtotalCents).toBe(32900);
+  });
+
+  it("prices Overnight Priority at 10, 30 and 50 km", () => {
+    expect(exGst("overnight", 10).subtotalCents).toBe(34900);
+    expect(exGst("overnight", 30).subtotalCents).toBe(35400);
+    expect(exGst("overnight", 50).subtotalCents).toBe(42400);
+  });
+
+  it("prices interstate hotshot at 200, 500 and 1000 km before extra verified costs", () => {
+    const twoHundred = exGst("interstate_hotshot", 200);
+    expect(twoHundred.subtotalCents).toBe(79900);
+    expect(twoHundred.reasons.join(" ")).toMatch(/Indicative only/);
+    expect(twoHundred.payable).toBe(false);
+    expect(exGst("interstate_hotshot", 500).subtotalCents).toBe(154900);
+    expect(exGst("interstate_hotshot", 1000).subtotalCents).toBe(279900);
+  });
+
+  it("refuses automatic acceptance when the carrier cost exceeds the selling price", () => {
+    const quote = priceQuote(input(), distance({ kilometres: 30 }), openConfig({ carrierAllowanceCents: 200000 }));
+    const option = quote.options[0];
+    expect(option.payable).toBe(false);
+    expect(option.estimatedProfitCents).toBeLessThan(0);
+    expect(option.reasons.join(" ")).toMatch(/margin|profit/i);
+  });
+
+  it("does not price a missing distance as zero kilometres", () => {
+    const quote = priceQuote(input(), distance({ kilometres: null, source: "unresolved" }), openConfig());
+    expect(quote.options[0].chargeableKm).toBeNull();
+    expect(quote.options[0].calculated).toBe(false);
+    expect(quote.options[0].subtotalCents).toBe(0);
+  });
+});
+
 describe("job margin", () => {
+  it("raises the minimum price so a percentage payment fee still leaves the target margin", () => {
+    const config = openConfig({
+      minGrossMargin: 0.25,
+      minGrossProfitCents: 0,
+      minimumViableSellingCents: 0,
+      paymentFeePercent: 0.1,
+      paymentFeeFixedCents: 0,
+      gstRegistered: true,
+      pricesIncludeGst: false,
+    });
+    const net = minimumSellingNetCents(10000, config);
+    const tax = applyGst(net, config);
+    const profit = grossProfitCents(tax.netCents, 10000, paymentFeeCents(tax.totalCents, config));
+    expect(profit / tax.netCents).toBeGreaterThanOrEqual(0.25);
+  });
+
+  it("requires a reason when an approved price misses the margin", () => {
+    const config = openConfig({ minGrossMargin: 0.25, minimumViableSellingCents: 0 });
+    expect(requiresMarginOverride({ netCents: 10000, directCostExGstCents: 9000, config })).toMatch(/margin/i);
+    expect(requiresMarginOverride({ netCents: 20000, directCostExGstCents: null, config })).toBeNull();
+  });
+
   it("calculates gross profit from ex-GST revenue and ex-GST direct cost", () => {
     const profit = grossProfitCents(19900, 12000, 500);
     expect(profit).toBe(7400);

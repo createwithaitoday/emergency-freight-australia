@@ -18,6 +18,18 @@ export function TrackActions({ token, canPay, canCancel, demo }: { token: string
     else setError(body.error || "Card checkout is not available.");
   }
 
+  async function paypal() {
+    setError("");
+    const response = await fetch("/api/payments/paypal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+    });
+    const body = await response.json();
+    if (body.url) window.location.href = body.url;
+    else setError(body.error || "PayPal is not available.");
+  }
+
   async function demoPay() {
     setError("");
     const response = await fetch("/api/payments/demo", {
@@ -53,7 +65,8 @@ export function TrackActions({ token, canPay, canCancel, demo }: { token: string
 
   return (
     <div className="mt-6 grid gap-3">
-      {canPay && <button className="btn-navy" type="button" onClick={() => void pay()}>Pay the confirmed price</button>}
+      {canPay && <button className="btn-navy" type="button" onClick={() => void pay()}>Pay by card</button>}
+      {canPay && <button className="rounded-xl border border-line px-4 py-3 font-semibold" type="button" onClick={() => void paypal()}>Pay with PayPal</button>}
       {canPay && demo && <button className="rounded-xl border border-line px-4 py-3 text-sm" type="button" onClick={() => void demoPay()}>Simulate sandbox payment</button>}
       {canCancel && <button className="text-left text-sm underline" type="button" onClick={() => void cancel()}>Cancel this request</button>}
       <form onSubmit={upload} className="rounded-2xl border border-line p-4">

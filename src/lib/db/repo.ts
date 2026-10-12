@@ -4,7 +4,7 @@ import { resolveDistance } from "@/lib/geo/distance";
 import { hashToken, invoiceNumber, newId, newToken, quoteNumber } from "@/lib/ids";
 import { formatAud } from "@/lib/money";
 import { notifyCodes } from "@/lib/notifications";
-import { applyGst, priceQuote } from "@/lib/pricing/engine";
+import { applyGst, priceQuote, requiresMarginOverride } from "@/lib/pricing/engine";
 import { defaultPricing } from "@/lib/pricing/defaults";
 import type { PricingConfig, QuoteInput, ServiceQuote } from "@/lib/pricing/types";
 import { hashPassword, verifyPassword } from "@/lib/passwords";
@@ -33,6 +33,7 @@ export interface BookingDraft extends QuoteInput {
   purchaseOrder: string;
   specialRequirements: string;
   utm: Record<string, string>;
+  intent?: "email" | "pay_estimate";
 }
 
 export async function getStoredPricing(): Promise<PricingConfig> {
@@ -115,7 +116,11 @@ export async function createBooking(draft: BookingDraft) {
     throw new AppError("Dangerous goods need a written declaration before the request can be lodged.");
   }
 
-  const status = initialStatus(option.payable);
+  const payEstimate = draft.intent === "pay_estimate";
+  if (payEstimate && (!option.calculated || option.totalCents <= 0)) {
+    throw new AppError("There is no calculated estimate to pay yet. Email the request instead.");
+  }
+  const status = payEstimate ? "awaiting_payment" : initialStatus(option.payable);
   const trackingToken = newToken();
   const bookingId = newId();
   const quoteId = newId();
@@ -174,9 +179,9 @@ export async function createBooking(draft: BookingDraft) {
     await query(
       `INSERT INTO bookings (
         id, quote_id, delivery_request_id, customer_id, tracking_token, idempotency_key, status, payment_status,
-        selling_net_cents, selling_gst_cents, selling_total_cents
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,'unpaid',$8,$9,$10)`,
-      [bookingId, quoteId, requestId, customerId, trackingToken, draft.idempotencyKey, status, option.subtotalCents, option.gstCents, option.totalCents],
+        selling_net_cents, selling_gst_cents, selling_total_cents, estimate_prepay
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,'unpaid',$8,$9,$10,$11)`,
+      [bookingId, quoteId, requestId, customerId, trackingToken, draft.idempotencyKey, status, option.subtotalCents, option.gstCents, option.totalCents, payEstimate],
     );
     await query(
       `INSERT INTO status_events (id, booking_id, from_status, to_status, note, actor) VALUES ($1,$2,NULL,$3,$4,$5)`,
@@ -200,6 +205,12 @@ export async function setSellingPrice(actor: string, bookingId: string, netCents
   const config = await getStoredPricing();
   if (netCents < config.minimumViableSellingCents && !overrideReason?.trim()) {
     throw new AppError("That price is below the minimum viable selling price. Record an override reason to continue.");
+  }
+  const existing = await (await getDb()).query(`SELECT carrier_cost_cents FROM bookings WHERE id = $1`, [bookingId]);
+  const carrierCost = existing[0]?.carrier_cost_cents == null ? null : Number(existing[0].carrier_cost_cents);
+  const marginBreach = requiresMarginOverride({ netCents, directCostExGstCents: carrierCost, config });
+  if (marginBreach && !overrideReason?.trim()) {
+    throw new AppError(`${marginBreach} Record an override reason to continue.`);
   }
   const tax = applyGst(netCents, config);
   const db = await getDb();
@@ -328,7 +339,8 @@ export async function markPaid(input: {
     }
     const quoteRows = await query(`SELECT payable, expires_at FROM quotes WHERE id = $1`, [booking.quote_id]);
     const quote = quoteRows[0];
-    if (!isTrue(quote?.payable)) throw new AppError("This price is not confirmed for payment", 409);
+    const estimatePrepay = isTrue(booking.estimate_prepay);
+    if (!estimatePrepay && !isTrue(quote?.payable)) throw new AppError("This price is not confirmed for payment", 409);
     if (quote?.expires_at && new Date(String(quote.expires_at)).getTime() < Date.now()) throw new AppError("This quote has expired", 409);
     const from = String(booking.status) as BookingStatus;
     if (from !== "awaiting_payment") throw new AppError("This booking is not awaiting payment", 409);
@@ -337,18 +349,24 @@ export async function markPaid(input: {
       [newId(), input.bookingId, input.provider, input.providerRef, input.amountCents],
     );
     await query(`UPDATE bookings SET payment_status = 'paid', updated_at = NOW() WHERE id = $1`, [input.bookingId]);
-    await moveStatus(query, input.bookingId, from, "confirmed", input.actor ?? input.provider, "Payment verified");
+    const nextStatus: BookingStatus = estimatePrepay ? "awaiting_availability" : "confirmed";
+    await moveStatus(query, input.bookingId, from, nextStatus, input.actor ?? input.provider, estimatePrepay ? "Estimated price paid. Vehicle still to be confirmed." : "Payment verified");
     await query(
       `INSERT INTO tracking_records (id, booking_id, message, is_public) VALUES ($1,$2,$3,TRUE)`,
-      [newId(), input.bookingId, "Payment verified. Booking confirmed."],
+      [newId(), input.bookingId, estimatePrepay ? "Estimated price paid. Dispatch still confirms the vehicle and any extra charge before the job is accepted." : "Payment verified. Booking confirmed."],
     );
     await query(
       `INSERT INTO invoices (id, booking_id, number, subtotal_cents, gst_cents, total_cents) VALUES ($1,$2,$3,$4,$5,$6)`,
       [newId(), input.bookingId, invoiceNumber(), booking.selling_net_cents, booking.selling_gst_cents, booking.selling_total_cents],
     );
-    return { duplicate: false as const, changed: true, from };
+    return { duplicate: false as const, changed: true, from, nextStatus };
   });
-  if (result.changed) await sendForBooking(input.bookingId, templatesForTransition("confirmed", result.from, "paid"));
+  if (result.changed && result.nextStatus) {
+    const templates = result.nextStatus === "confirmed"
+      ? templatesForTransition("confirmed", result.from, "paid")
+      : ["payment_received"];
+    await sendForBooking(input.bookingId, templates);
+  }
   return result;
 }
 
@@ -430,6 +448,7 @@ export async function getPublicTracking(token: string) {
   const rows = await db.query(
     `SELECT b.status, b.payment_status, b.customer_eta, b.selling_total_cents, b.selling_gst_cents, b.selling_net_cents,
             q.public_number, q.service_name, q.payable, q.status AS quote_status, q.expires_at, q.calculated, q.gst_registered,
+            b.estimate_prepay,
             d.pickup_suburb, d.pickup_postcode, d.delivery_suburb, d.delivery_postcode
      FROM bookings b
      JOIN quotes q ON q.id = b.quote_id

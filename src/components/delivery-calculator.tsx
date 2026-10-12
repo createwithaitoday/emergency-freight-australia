@@ -155,10 +155,14 @@ export function DeliveryCalculator({
     setStep((value) => Math.min(5, value + 1));
   }
 
-  async function submit() {
+  async function submit(intent: "email" | "pay_estimate", provider?: "stripe" | "paypal") {
     const problem = validateStep(5, form);
     if (problem) {
       setError(problem);
+      return;
+    }
+    if (intent === "pay_estimate" && !selected?.calculated) {
+      setError("There is no calculated estimate to pay. Email the request and dispatch will price it.");
       return;
     }
     setBusy(true);
@@ -183,17 +187,36 @@ export function DeliveryCalculator({
         website: form.website,
         description: form.description,
         dgDeclaration: form.dgDeclaration,
+        intent,
         utm: readUtm(),
       }),
     });
     const body = await response.json();
-    setBusy(false);
     if (!response.ok) {
+      setBusy(false);
       setError(body.error || "The request could not be lodged.");
       return;
     }
-    track("quote_requested", { status: body.status });
-    window.location.href = `/track/${body.trackingToken}`;
+    track(intent === "email" ? "quote_requested" : "payment_started", { status: body.status, ...(provider ? { provider } : {}) });
+    if (intent === "email") {
+      window.location.href = `/track/${body.trackingToken}`;
+      return;
+    }
+    const payResponse = await fetch(provider === "paypal" ? "/api/payments/paypal" : "/api/payments/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: body.trackingToken }),
+    });
+    const payBody = await payResponse.json();
+    setBusy(false);
+    if (payBody.url) {
+      window.location.href = payBody.url;
+      return;
+    }
+    setError(payBody.error || "Payment could not be started. The request is saved on the tracking page.");
+    window.setTimeout(() => {
+      window.location.href = `/track/${body.trackingToken}`;
+    }, 1800);
   }
 
   return (
@@ -353,6 +376,11 @@ export function DeliveryCalculator({
               <input type="checkbox" checked={form.terms} onChange={(event) => update({ terms: event.target.checked })} />
               <span>I accept the <a className="underline" href="/legal/terms">terms</a>, including that an indicative price is not a confirmed booking.</span>
             </label>
+            {selected?.calculated && (
+              <p className="rounded-xl bg-paper px-3 py-3 text-sm sm:col-span-2">
+                Estimated total {formatAud(selected.totalCents)} {selected.gstRegistered ? `including GST of ${formatAud(selected.gstCents)}` : selected.gstLabel}. Paying this estimate does not confirm a vehicle. Dispatch still checks availability and any extra charge.
+              </p>
+            )}
             <label className="absolute left-[-9999px]" aria-hidden="true">
               Website
               <input tabIndex={-1} autoComplete="off" value={form.website} onChange={(event) => update({ website: event.target.value })} />
@@ -362,9 +390,9 @@ export function DeliveryCalculator({
       </div>
       {selected && step < 4 && (
         <div className="mt-4 rounded-2xl bg-paper px-3 py-3" aria-live="polite">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted">{selected.payable ? "Confirmed booking price" : "Indicative estimate"}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted">{selected.payable ? "Confirmed booking price" : selected.serviceCode === "interstate_hotshot" ? "Indicative only — confirmation required" : "Indicative estimate"}</p>
           <p className="font-display text-2xl">{selected.calculated ? formatAud(selected.totalCents) : `From ${formatAud(selected.fromCents ?? 0)}`}</p>
-          <p className="text-xs text-muted">{selected.gstRegistered ? `${selected.gstLabel}. GST ${formatAud(selected.gstCents)}.` : selected.gstLabel} {selected.distanceLabel}</p>
+          <p className="text-xs text-muted">Ex GST {selected.calculated ? formatAud(selected.subtotalCents) : "to be confirmed"}. {selected.gstRegistered ? `${selected.gstLabel}. GST ${formatAud(selected.gstCents)}. Total ${formatAud(selected.totalCents)}.` : selected.gstLabel} {selected.distanceLabel}</p>
         </div>
       )}
       {error && <p className="mt-3 text-sm text-red-700" role="alert">{error}</p>}
@@ -384,9 +412,17 @@ export function DeliveryCalculator({
           </button>
         )}
         {step === 5 && (
-          <button type="button" className="btn-orange sm:col-span-2" disabled={busy} onClick={() => void submit()}>
-            {busy ? "Sending request…" : selected?.payable ? "Continue to payment" : "Lodge request for confirmation"}
-          </button>
+          <>
+            <button type="button" className="btn-orange" disabled={busy || !selected?.calculated} onClick={() => void submit("pay_estimate", "stripe")}>
+              {busy ? "Sending…" : "Pay estimated price by card"}
+            </button>
+            <button type="button" className="rounded-xl border border-navy-900 px-4 py-3 font-semibold" disabled={busy || !selected?.calculated} onClick={() => void submit("pay_estimate", "paypal")}>
+              Pay estimated price with PayPal
+            </button>
+            <button type="button" className="rounded-xl border border-line px-4 py-3 font-semibold sm:col-span-2" disabled={busy} onClick={() => void submit("email")}>
+              Email this request
+            </button>
+          </>
         )}
       </div>
     </div>
@@ -415,6 +451,7 @@ function QuoteSummary({ option, zoneNote }: { option: ServiceQuote; zoneNote?: s
       <p>Total payable: {option.calculated ? formatAud(option.totalCents) : "Set after dispatch prices the job"}</p>
       <p>Quote expiry: {new Date(option.expiresAt).toLocaleString("en-AU", { timeZone: "Australia/Sydney" })}</p>
       <p>Availability: {option.collectionWindow ?? "Awaiting availability confirmation"}</p>
+      <p className="mt-3 text-muted">{option.customerNotice}</p>
       <ul className="mt-2 list-disc pl-4 text-muted">
         {option.reasons.map((reason) => <li key={reason}>{reason}</li>)}
       </ul>

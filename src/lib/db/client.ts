@@ -1,8 +1,7 @@
+import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
-import { PGlite } from "@electric-sql/pglite";
-import pg from "pg";
 import { defaultPricing } from "@/lib/pricing/defaults";
 import { defaultTemplates } from "@/lib/template-defaults";
 import { hashPassword } from "@/lib/passwords";
@@ -45,6 +44,10 @@ async function openDatabase(): Promise<Database> {
 async function openPglite(): Promise<Database> {
   const dir = process.env.PGDATA_DIR || path.join(process.cwd(), "data", "pglite");
   mkdirSync(dir, { recursive: true });
+  // Loaded by name at runtime so the production server bundle does not rewrite
+  // this optional local database into a missing external package.
+  const moduleName = ["@electric-sql", "pglite"].join("/");
+  const { PGlite } = loadPackage<typeof import("@electric-sql/pglite")>(moduleName);
   const db = new PGlite(dir);
   await db.waitReady;
   const enqueue = queue();
@@ -74,8 +77,14 @@ async function openPglite(): Promise<Database> {
   };
 }
 
+function loadPackage<T>(name: string): T {
+  const require = createRequire(path.join(process.cwd(), "package.json"));
+  return require(name) as T;
+}
+
 async function openPostgres(): Promise<Database> {
-  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+  const { Pool } = loadPackage<typeof import("pg")>("pg");
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   const query: Sql = async (text, params = []) => {
     const result = await pool.query(text, params);
     return result.rows as Record<string, unknown>[];

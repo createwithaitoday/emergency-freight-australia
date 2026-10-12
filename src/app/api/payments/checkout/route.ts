@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   try {
     const db = await getDb();
     const rows = await db.query(
-      `SELECT b.id, b.status, b.payment_status, b.selling_total_cents, b.tracking_token, q.payable, q.expires_at, q.public_number, d.contact_email
+      `SELECT b.id, b.status, b.payment_status, b.selling_total_cents, b.tracking_token, b.estimate_prepay, q.payable, q.expires_at, q.public_number, d.contact_email
        FROM bookings b JOIN quotes q ON q.id = b.quote_id JOIN delivery_requests d ON d.id = b.delivery_request_id
        WHERE b.tracking_token = $1`,
       [token],
@@ -22,8 +22,9 @@ export async function POST(request: Request) {
     const booking = rows[0];
     if (!booking) throw new AppError("Booking not found", 404);
     const payable = booking.payable === true || booking.payable === "t" || booking.payable === "true";
-    if (String(booking.status) !== "awaiting_payment" || !payable) {
-      throw new AppError("This booking does not have a confirmed price ready for payment.", 409);
+    const estimate = booking.estimate_prepay === true || booking.estimate_prepay === "t" || booking.estimate_prepay === "true";
+    if (String(booking.status) !== "awaiting_payment" || (!payable && !estimate)) {
+      throw new AppError("This booking does not have a price ready for payment.", 409);
     }
     if (booking.expires_at && new Date(String(booking.expires_at)).getTime() < Date.now()) {
       throw new AppError("This quote has expired. Ask dispatch to reconfirm it.", 409);
@@ -39,7 +40,10 @@ export async function POST(request: Request) {
         price_data: {
           currency: "aud",
           unit_amount: Number(booking.selling_total_cents),
-          product_data: { name: `${brand.name} ${booking.public_number}` },
+          product_data: {
+            name: estimate ? `${brand.name} estimated price ${booking.public_number}` : `${brand.name} ${booking.public_number}`,
+            description: estimate ? "Prepayment of the server-calculated estimate. A vehicle is still confirmed by dispatch." : undefined,
+          },
         },
       }],
       success_url: `${brand.url.replace(/\/$/, "")}/booking/success?token=${token}`,

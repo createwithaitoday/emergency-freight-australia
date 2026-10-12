@@ -14,7 +14,8 @@ export default async function TrackPage({ params }: { params: Promise<{ token: s
   if (!data) notFound();
   const status = String(data.booking.status) as BookingStatus;
   const payable = data.booking.payable === true || data.booking.payable === "t";
-  const canPay = status === "awaiting_payment" && payable;
+  const estimate = data.booking.estimate_prepay === true || data.booking.estimate_prepay === "t";
+  const canPay = status === "awaiting_payment" && (payable || estimate);
   return (
     <article className="mx-auto max-w-2xl px-4 py-12">
       <p className="text-sm font-semibold uppercase tracking-wide text-orange">{String(data.booking.public_number)}</p>

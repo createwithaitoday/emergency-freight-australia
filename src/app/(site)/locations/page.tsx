@@ -12,7 +12,12 @@ export default function LocationsPage() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-12">
       <h1 className="font-display text-5xl">Coverage</h1>
-      <p className="mt-3 max-w-2xl text-muted">These are the places the rate cards talk about. A listing is not a guarantee that a driver is free, and there is no page for every suburb.</p>
+      <p className="mt-3 max-w-2xl text-muted">Requests can start in New South Wales, Queensland or Victoria. A suburb page is published only after review. A listing is not a guarantee that a driver is free.</p>
+      <div className="mt-6 flex flex-wrap gap-3 text-sm font-semibold">
+        <Link href="/locations/nsw">New South Wales</Link>
+        <Link href="/locations/qld">Queensland</Link>
+        <Link href="/locations/vic">Victoria</Link>
+      </div>
       <div className="mt-8 grid gap-4 md:grid-cols-2">
         {locations.map((location) => (
           <Link key={location.slug} href={`/locations/${location.slug}`} className="overflow-hidden rounded-2xl border border-line bg-white">

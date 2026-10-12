@@ -1,11 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { previewRateCard } from "@/lib/pricing/engine";
+import { formatAud } from "@/lib/money";
 import type { PricingConfig } from "@/lib/pricing/types";
 
 export function PricingEditor({ initial }: { initial: PricingConfig }) {
   const [config, setConfig] = useState(initial);
   const [message, setMessage] = useState("");
+  const preview = useMemo(() => previewRateCard(config), [config]);
 
   function updateService(index: number, field: "baseFeeCents" | "perKmCents" | "minimumCents", dollars: string) {
     const services = config.services.map((service, serviceIndex) => serviceIndex === index ? { ...service, [field]: Math.round(Number(dollars) * 100) } : service);
@@ -37,6 +40,33 @@ export function PricingEditor({ initial }: { initial: PricingConfig }) {
           </div>
         </fieldset>
       ))}
+      <label className="grid gap-1 text-sm text-white">Minimum gross margin (percent)
+        <input className="field" inputMode="decimal" defaultValue={String(config.minGrossMargin * 100)} onChange={(event) => setConfig({ ...config, minGrossMargin: Number(event.target.value) / 100 })} />
+      </label>
+      <label className="grid gap-1 text-sm text-white">Minimum gross profit (dollars)
+        <input className="field" inputMode="decimal" defaultValue={(config.minGrossProfitCents / 100).toFixed(2)} onChange={(event) => setConfig({ ...config, minGrossProfitCents: Math.round(Number(event.target.value) * 100) })} />
+      </label>
+      <label className="grid gap-1 text-sm text-white">Carrier cost allowance (dollars, blank if unknown)
+        <input className="field" inputMode="decimal" defaultValue={config.carrierAllowanceCents == null ? "" : (config.carrierAllowanceCents / 100).toFixed(2)} onChange={(event) => setConfig({ ...config, carrierAllowanceCents: event.target.value.trim() === "" ? null : Math.round(Number(event.target.value) * 100) })} />
+      </label>
+      <p className="text-sm text-white/70">Distance rounding: chargeable kilometres are the road distance rounded up to the next whole kilometre, with a floor of {config.minChargeableKm} km. The rows below are test estimates, not verified transport quotes.</p>
+      <div className="overflow-x-auto rounded-2xl bg-white p-4 text-sm">
+        <table className="w-full text-left">
+          <thead>
+            <tr><th className="py-1">Service</th><th>Km</th><th>Ex GST</th><th>Total</th></tr>
+          </thead>
+          <tbody>
+            {preview.filter((row) => [10, 30, 50, 100, 200, 500, 1000].includes(row.kilometres)).map((row) => (
+              <tr key={`${row.serviceCode}-${row.kilometres}`}>
+                <td className="py-1">{row.serviceName}</td>
+                <td>{row.kilometres}</td>
+                <td>{row.calculated ? formatAud(row.exGstCents) : "Manual"}</td>
+                <td>{row.calculated ? formatAud(row.totalCents) : "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <button className="btn-orange" type="button" onClick={() => void save()}>Save rate card</button>
       {message && <p className="text-sm text-white">{message}</p>}
     </div>

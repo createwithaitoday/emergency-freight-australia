@@ -34,7 +34,7 @@ const TRANSITIONS: Record<BookingStatus, BookingStatus[]> = {
   new_request: ["awaiting_price_confirmation", "awaiting_availability", "awaiting_payment", "declined", "cancelled"],
   awaiting_price_confirmation: ["awaiting_availability", "awaiting_payment", "declined", "cancelled"],
   awaiting_availability: ["awaiting_price_confirmation", "awaiting_payment", "declined", "cancelled"],
-  awaiting_payment: ["confirmed", "cancelled"],
+  awaiting_payment: ["confirmed", "awaiting_availability", "cancelled"],
   confirmed: ["driver_allocated", "cancelled"],
   driver_allocated: ["collected", "failed", "cancelled"],
   collected: ["in_transit", "failed"],

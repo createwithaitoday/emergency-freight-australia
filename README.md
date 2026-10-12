@@ -69,7 +69,9 @@ npm start
 
 ## Payments, maps, email
 
-- Stripe test keys: `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`. The webhook route is `/api/webhooks/stripe`. Amounts are taken from the booking row, not from the browser.
+- Stripe: `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`. The webhook route is `/api/webhooks/stripe`. Amounts are taken from the booking row, not from the browser.
+- PayPal: `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` and `PAYPAL_ENV` (`sandbox` or `live`). The customer can pay the server-calculated estimate by card or PayPal, or email the request instead. An estimate payment is a prepayment. It does not confirm a vehicle.
+- Search inventory: sign in and open `/admin/seo`, then choose “Build or resume inventory”. That loads the locality extract and builds candidate pages. Template suburb pages stay unpublished. Submit `https://emergencyfreightaustralia.com.au/sitemap.xml` in Google Search Console and Bing Webmaster Tools after the hostname is live. The index only lists published, indexable URLs.
 - Driving distance: `GOOGLE_MAPS_API_KEY` or `OPENROUTESERVICE_API_KEY`. Without a key, metro distances are labelled unverified and cannot be confirmed automatically.
 - Email: `RESEND_API_KEY` and `EMAIL_FROM`. SMS: Twilio variables in `.env.example`. If they are empty outside production, messages are written to the server log.
 
