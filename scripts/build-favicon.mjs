@@ -10,6 +10,7 @@ async function mark(size, pad) {
   return sharp(trimmed)
     .resize(inner, inner, { fit: "contain", background: navy })
     .extend({ top: pad, bottom: pad, left: pad, right: pad, background: navy })
+    .ensureAlpha()
     .png()
     .toBuffer();
 }
@@ -20,7 +21,7 @@ function ico(png, size) {
   header.writeUInt16LE(1, 2);
   header.writeUInt16LE(1, 4);
   header.writeUInt8(size >= 256 ? 0 : size, 6);
-  header.writeUInt8(size >= 256 ? 0 : size, 8);
+  header.writeUInt8(size >= 256 ? 0 : size, 7);
   header.writeUInt16LE(1, 10);
   header.writeUInt16LE(32, 12);
   header.writeUInt32LE(png.length, 14);
