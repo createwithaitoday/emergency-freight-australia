@@ -23,6 +23,8 @@ Windows build:
 $env:NEXT_PUBLIC_SITE_URL = "https://emergencyfreightaustralia.com.au"
 $env:NEXT_PUBLIC_DOMAIN = "emergencyfreightaustralia.com.au"
 $env:NEXT_PUBLIC_DISPATCH_EMAIL = "dispatch@emergencyfreightaustralia.com.au"
+$env:NEXT_PUBLIC_PHONE_DISPLAY = "0421 233 434"
+$env:NEXT_PUBLIC_PHONE_TEL = "+61421233434"
 npm run build
 ```
 

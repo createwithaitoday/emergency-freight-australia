@@ -14,8 +14,8 @@ export const brand = {
     "From immediate Sydney pickups to interstate emergency freight, we coordinate dedicated transport for deliveries that cannot wait.",
   supporting:
     "Book urgent pickups, dedicated direct deliveries and interstate emergency freight online, 24/7. Get an indicative price, confirm your requirements and arrange the fastest suitable transport for your deadline.",
-  phoneDisplay: process.env.NEXT_PUBLIC_PHONE_DISPLAY || "1300 000 000",
-  phoneTel: process.env.NEXT_PUBLIC_PHONE_TEL || "+611300000000",
+  phoneDisplay: process.env.NEXT_PUBLIC_PHONE_DISPLAY || "0421 233 434",
+  phoneTel: process.env.NEXT_PUBLIC_PHONE_TEL || "+61421233434",
   email: process.env.NEXT_PUBLIC_DISPATCH_EMAIL || "dispatch@example.com",
   domain: process.env.NEXT_PUBLIC_DOMAIN || "emergencyfreightaustralia.com.au",
   url: process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000",
